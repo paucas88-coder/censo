@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Censo Pediátrico — Sanatorio 9 de Julio</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#eef2ff;color:#1e293b;min-height:100vh;padding-bottom:62px}
+:root{--blue:#1d4ed8;--blue2:#1e40af;--blue-l:#dbeafe;--blue-ll:#eff6ff;--warn:#f59e0b;--orange:#ea580c;--red:#dc2626;--green:#16a34a;--gray:#6b7280;--border:#e2e8f0}
+.hdr{background:var(--blue);color:white;padding:12px 16px;position:sticky;top:0;z-index:20;box-shadow:0 2px 8px rgba(29,78,216,.3)}
+.hdr-row{display:flex;justify-content:space-between;align-items:center}
+.hdr-sub{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:2px;color:#93c5fd;margin-bottom:1px}
+.hdr-title{font-size:18px;font-weight:800}
+.hdr-date{font-size:11px;color:#93c5fd;text-transform:capitalize}
+.hdr-cnt{text-align:right}.hdr-num{font-size:28px;font-weight:800;line-height:1}.hdr-lbl{font-size:10px;color:#93c5fd}
+.sync-badge{position:fixed;top:8px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);color:white;font-size:11px;font-weight:700;padding:4px 14px;border-radius:99px;z-index:100;display:none}
+.bot-nav{position:fixed;bottom:0;left:0;right:0;background:white;border-top:1px solid var(--border);display:flex;z-index:30;box-shadow:0 -2px 8px rgba(0,0,0,.08)}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 4px;border:none;background:none;cursor:pointer;font-size:10px;font-weight:600;color:var(--gray);gap:2px}
+.nav-btn.active{color:var(--blue)}.nav-btn .ico{font-size:20px}
+/* Map */
+.map-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;padding:12px}
+.bed-card{border-radius:14px;border:2px solid var(--border);background:white;padding:10px 10px 8px;cursor:pointer;transition:.15s;min-height:110px;display:flex;flex-direction:column;justify-content:space-between}
+.bed-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.1)}
+.bed-card.lv0{border-color:#bfdbfe;background:#f8faff}.bed-card.lv1{border-color:#fde68a;background:#fffdf0}
+.bed-card.lv2{border-color:#fdba74;background:#fff8f0}.bed-card.lv3{border-color:#fca5a5;background:#fff5f5}
+.bed-card.empty{border-color:#e2e8f0;background:#f8fafc;opacity:.6;cursor:pointer}
+.bed-num{font-size:11px;font-weight:700;color:var(--blue);background:var(--blue-l);display:inline-block;padding:2px 8px;border-radius:99px;margin-bottom:4px}
+.bed-name{font-size:13px;font-weight:700;line-height:1.2;margin-bottom:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.bed-dx{font-size:11px;color:var(--gray);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;margin-bottom:4px}
+.bed-footer{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:3px}
+.bed-days{font-size:10px;font-weight:700;color:white;background:var(--blue);padding:2px 6px;border-radius:99px}
+.alert-dots{display:flex;gap:3px;flex-wrap:wrap}
+.dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.dot-r{background:var(--red)}.dot-o{background:var(--orange)}.dot-y{background:var(--warn)}.dot-b{background:#7c3aed}
+.add-bed{display:flex;align-items:center;justify-content:center;font-size:28px;color:#94a3b8;min-height:80px;border-style:dashed}
+/* List */
+.search-inp{width:100%;background:rgba(255,255,255,.15);border:none;border-radius:10px;padding:9px 14px;font-size:14px;color:white;outline:none;margin-top:8px}
+.search-inp::placeholder{color:#93c5fd}
+.list-wrap{padding:8px 12px 12px}
+.pt-card{background:white;border-radius:14px;border:1px solid var(--border);padding:12px;margin-bottom:8px;cursor:pointer;display:flex;gap:10px;align-items:flex-start;transition:.1s}
+.pt-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.pt-card.lv1{border-left:3px solid var(--warn)}.pt-card.lv2{border-left:3px solid var(--orange)}.pt-card.lv3{border-left:3px solid var(--red)}
+.cama-tag{background:var(--blue);color:white;font-weight:800;font-size:12px;padding:4px 8px;border-radius:8px;flex-shrink:0;min-width:48px;text-align:center}
+.pt-info{flex:1;min-width:0}
+.pt-name{font-weight:700;font-size:14px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.pt-sub{font-size:11px;color:var(--gray);margin-top:1px}
+.pt-dx{font-size:13px;color:#334155;margin-top:3px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.pt-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
+.days-pill{font-size:10px;font-weight:700;color:white;background:var(--blue);padding:2px 7px;border-radius:99px;white-space:nowrap}
+.chip-sm{font-size:9px;font-weight:700;padding:2px 6px;border-radius:99px;border:1px solid}
+/* Detail/Edit */
+.screen{min-height:calc(100vh - 62px)}
+.sticky-hdr{position:sticky;top:0;z-index:15;background:white;border-bottom:1px solid var(--border);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.back-btn{background:none;border:none;color:var(--blue);font-weight:700;font-size:14px;cursor:pointer;padding:0;flex-shrink:0}
+.hdr-center{display:flex;align-items:center;gap:6px;overflow:hidden;flex:1;margin:0 8px}
+.cama-badge{background:var(--blue);color:white;font-weight:800;font-size:12px;padding:3px 10px;border-radius:8px;flex-shrink:0}
+.hdr-name{font-weight:700;font-size:14px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.edit-btn{background:var(--blue-l);color:var(--blue);border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0}
+.save-ind{font-size:11px;min-width:72px;text-align:right;color:var(--gray);flex-shrink:0}
+.saved-ok{color:var(--green);font-weight:700}
+.detail-wrap{padding:12px 14px 80px}
+.auto-alerts{background:#fef2f2;border:1px solid #fca5a5;border-radius:12px;padding:10px 12px;margin-bottom:10px}
+.auto-alerts.warn{background:#fffbeb;border-color:#fde68a}
+.auto-alert-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--red);margin-bottom:5px}
+.auto-alert-title.warn{color:var(--warn)}
+.auto-alert-item{font-size:12px;color:#7f1d1d;margin-bottom:2px}.auto-alert-item.warn{color:#78350f}
+.sec{background:white;border-radius:14px;border:1px solid var(--border);margin-bottom:8px;overflow:hidden}
+.sec-hdr{padding:10px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--blue);background:var(--blue-ll);display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none}
+.sec-body{padding:12px 14px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
+.field{margin-bottom:10px}
+.flbl{font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+.fval{font-size:13px;color:#1e293b;min-height:20px;white-space:pre-wrap}
+.fval.empty{color:#cbd5e1;font-style:italic}
+/* Form inputs */
+.finp{width:100%;border:1.5px solid var(--border);border-radius:9px;padding:8px 11px;font-size:13px;outline:none;font-family:inherit;background:white;transition:.15s}
+.finp:focus{border-color:var(--blue);box-shadow:0 0 0 2px var(--blue-l)}
+textarea.finp{resize:vertical;min-height:65px}
+.form-sec-hdr{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--blue);padding:10px 0 6px;border-top:1px solid var(--border);margin-top:6px}
+.form-sec-hdr:first-child{border-top:none;padding-top:0}
+.origin-btns{display:flex;gap:6px;flex-wrap:wrap}
+.orig-btn{padding:7px 14px;border-radius:99px;border:2px solid var(--border);background:white;font-size:12px;font-weight:700;cursor:pointer;color:var(--gray);transition:.15s}
+.orig-btn.active{border-color:var(--blue);background:var(--blue);color:white}
+/* Meds */
+.med-item{background:#f8fafc;border-radius:10px;padding:8px 11px;margin-bottom:5px}
+.med-item.edit{background:white;border:1.5px solid var(--border);padding:10px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.med-row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.med-name{font-size:13px;font-weight:700}.med-sub{font-size:11px;color:var(--gray)}
+.day-pill{background:var(--blue);color:white;font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;white-space:nowrap;flex-shrink:0}
+.day-pill.warn{background:var(--orange)}.day-pill.danger{background:var(--red)}
+.med-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:6px}
+.minp{border:1.5px solid var(--border);border-radius:8px;padding:6px 9px;font-size:12px;width:100%;outline:none;font-family:inherit;background:white}
+.minp:focus{border-color:var(--blue)}
+.add-med-btn{width:100%;padding:8px;border:1.5px dashed #93c5fd;border-radius:10px;background:var(--blue-ll);color:var(--blue);font-size:12px;font-weight:700;cursor:pointer;margin-top:4px}
+.rm-btn{background:none;border:none;color:#cbd5e1;font-size:18px;cursor:pointer;line-height:1;padding:0 3px;flex-shrink:0}
+.rm-btn:hover{color:var(--red)}
+/* Med group header */
+.med-group-hdr{font-size:10px;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:1px;margin:8px 0 4px;padding-left:4px;border-left:3px solid var(--blue)}
+/* Evolución timeline */
+.evol-entry{border-left:3px solid var(--blue-l);padding:6px 10px;margin-bottom:8px;background:var(--blue-ll);border-radius:0 8px 8px 0}
+.evol-fecha{font-size:11px;font-weight:700;color:var(--blue);margin-bottom:3px}
+.evol-desc{font-size:13px;white-space:pre-wrap}
+/* Estudios */
+.estudio-item{background:#f8fafc;border-radius:8px;padding:8px 10px;margin-bottom:5px}
+.estudio-fecha{font-size:10px;font-weight:700;color:var(--blue);margin-bottom:3px}
+.estudio-inf{font-size:13px}
+.estudio-grupo-hdr{font-size:11px;font-weight:700;color:#334155;margin:8px 0 5px;display:flex;align-items:center;gap:5px}
+/* Pendientes */
+.pend-item{display:flex;align-items:flex-start;gap:8px;margin-bottom:6px}
+.pend-cb{width:16px;height:16px;cursor:pointer;margin-top:2px;flex-shrink:0;accent-color:var(--blue)}
+.pend-txt{font-size:13px;flex:1}
+.pend-txt.done{text-decoration:line-through;color:#94a3b8}
+/* Chips */
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;border:1px solid;cursor:pointer}
+.chip-off{background:white;color:#94a3b8;border-color:var(--border)}
+.chip-ayuno{background:#fed7aa;color:#c2410c;border-color:#fdba74}
+.chip-aisla{background:#fecaca;color:#b91c1c;border-color:#fca5a5}
+.chip-alergia{background:#fef08a;color:#a16207;border-color:#fde047}
+.chip-caida{background:#e9d5ff;color:#7c3aed;border-color:#d8b4fe}
+.chip-o2{background:#bfdbfe;color:var(--blue);border-color:#93c5fd}
+.chip-npt{background:#bbf7d0;color:#15803d;border-color:#86efac}
+.chip-barrera{background:#fbcfe8;color:#be185d;border-color:#f9a8d4}
+.sticky-bot{position:fixed;bottom:62px;left:0;right:0;background:white;border-top:1px solid var(--border);padding:10px 14px;z-index:15;box-shadow:0 -2px 8px rgba(0,0,0,.06)}
+.btn{display:block;width:100%;padding:11px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;border:none;text-align:center}
+.btn-primary{background:var(--blue);color:white}.btn-red{background:var(--red);color:white}
+.btn-red-o{background:#fef2f2;border:1.5px solid #fca5a5;color:var(--red)}
+.btn-blue-o{background:var(--blue-ll);border:1.5px solid #bfdbfe;color:var(--blue)}
+.btn-sm{font-size:12px;padding:7px 12px;border-radius:9px;font-weight:700;cursor:pointer;border:none}
+.tag-ucip{display:inline-block;background:#ede9fe;color:#7c3aed;border-radius:99px;font-size:10px;font-weight:700;padding:2px 8px;margin-left:4px}
+.hist-card{background:white;border-radius:12px;border:1px solid var(--border);margin:0 12px 8px;overflow:hidden}
+.hist-top{padding:12px;cursor:pointer}
+.hist-name{font-weight:700;font-size:14px}.hist-sub{font-size:11px;color:var(--gray);margin-top:2px}
+.hist-meta{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.hist-right{text-align:right;flex-shrink:0}
+.hist-date{font-size:11px;font-weight:700;color:var(--gray)}.hist-days{font-size:10px;color:#94a3b8}
+.hist-tipo{font-size:10px;font-weight:700;background:var(--blue-l);color:var(--blue);padding:2px 8px;border-radius:99px;display:inline-block;margin-top:3px}
+.toggle-lbl{font-size:11px;color:#3b82f6;margin-top:4px}
+.hist-detail{border-top:1px solid var(--border);padding:10px 12px}
+.loading{display:flex;align-items:center;justify-content:center;height:50vh;color:#94a3b8;font-size:14px;flex-direction:column;gap:8px}
+.spinner{width:32px;height:32px;border:3px solid var(--blue-l);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty-st{text-align:center;color:#94a3b8;padding:48px 24px;font-size:14px;line-height:1.6}
+.fsel{width:100%;border:1.5px solid var(--border);border-radius:9px;padding:8px 11px;font-size:13px;outline:none;font-family:inherit;background:white}
+.fsel:focus{border-color:var(--blue)}
+@media print{.no-print{display:none!important}}
+</style>
+</head>
+<body>
+<div id="sync-badge" class="sync-badge no-print">🔄 Actualizando…</div>
+<div id="app"><div class="loading"><div class="spinner"></div>Conectando con Firebase…</div></div>
+
+<script>
+// ══ FIREBASE CONFIG ════════════════════════════════════════════════
+var firebaseConfig = {
+  apiKey:            "AIzaSyBJBSfyRzo711Bu8tDLTgPJ6ibZnjHQCW4",
+  authDomain:        "pase-residencia-s9j.firebaseapp.com",
+  projectId:         "pase-residencia-s9j",
+  storageBucket:     "pase-residencia-s9j.firebasestorage.app",
+  messagingSenderId: "855527116692",
+  appId:             "1:855527116692:web:b93bce6a67cb3396c3c981"
+};
+firebase.initializeApp(firebaseConfig);
+var db = firebase.firestore();
+var ptsCol = db.collection("patients");
+var dcCol  = db.collection("discharged");
+
+// ── Constantes ────────────────────────────────────────────────────────
+var CORTICOIDS   = ["dexametasona","hidrocortisona","betametasona","metilprednisolona"];
+var ALERTAS_CHIP = ["Ayuno","Aislamiento","Alergia","Riesgo caída","O2","NPT","Barrera"];
+var CHIP_CLS     = {"Ayuno":"chip-ayuno","Aislamiento":"chip-aisla","Alergia":"chip-alergia","Riesgo caída":"chip-caida","O2":"chip-o2","NPT":"chip-npt","Barrera":"chip-barrera"};
+var ESTADOS_NUT  = ["Normal","Desnutrición leve","Desnutrición moderada","Desnutrición grave","Sobrepeso","Obesidad"];
+var ORIGENES     = ["Guardia","Quirófano","Post-UCIP"];
+var DESTINOS     = ["Domicilio","UCIP","UTI Pediátrica","Traslado a otro centro","Fallecimiento","Otro"];
+var TIPOS_ALTA   = ["Externación","UCIP","UTI Pediátrica","Traslado a otro centro","Fallecimiento","Otro"];
+var MED_TIPOS    = ["ATB","CTC","PHP","Analgesia","Broncodilatador","Antiparasitario","Antiemético","Vitaminas","Otro"];
+var VACUNAS_OPTS = ["Completa con carnet","Completa sin carnet","Incompleta"];
+var TIPOS_PARTO  = ["Vaginal","Cesárea","Fórceps/Vacuum"];
+var ESTUDIO_GRP  = [
+  {key:"laboratorio",   lbl:"🧪 Laboratorio"},
+  {key:"microbiologia", lbl:"🦠 Microbiología"},
+  {key:"imagenes",      lbl:"📷 Imágenes"},
+  {key:"interconsultas",lbl:"👨‍⚕️ Interconsultas"}
+];
+var SECS = {};
+
+// ── Estado ────────────────────────────────────────────────────────────
+var S = {
+  view:"mapa", prev:"mapa",
+  patients:[], discharged:[],
+  draft:null, selPt:null,
+  search:"", loading:true,
+  tipoAlta:"", destinoAlta:"",
+  altaConfirm:false, delConfirm:null, histSel:null, saveTimer:null
+};
+var loadCount = 0;
+
+// ── Utils ─────────────────────────────────────────────────────────────
+function uid()    { return Date.now()+"_"+Math.random().toString(36).slice(2); }
+function todayISO(){ return new Date().toISOString().split("T")[0]; }
+function today()  { return new Date().toLocaleDateString("es-AR",{weekday:"long",year:"numeric",month:"long",day:"numeric"}); }
+function diasDesde(f){ var d=Math.floor((Date.now()-new Date(f))/864e5); return d===0?"hoy":d+"d"; }
+function diaNum(f){ if(!f) return 0; return Math.max(1,Math.floor((Date.now()-new Date(f))/864e5)+1); }
+function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function noop(){}
+function showSync(v){ var el=document.getElementById("sync-badge"); if(el) el.style.display=v?"block":"none"; }
+
+function newMed(wd){ var m={id:uid(),tipo:"",nombre:"",dosis:"",via:"",frecuencia:""}; if(wd) m.fechaInicio=todayISO(); return m; }
+function newEvol(){ return {id:uid(),fecha:todayISO(),descripcion:""}; }
+function newEstudio(){ return {id:uid(),fecha:todayISO(),informe:""}; }
+function newPend(){ return {id:uid(),texto:"",done:false}; }
+function newInternacion(){ return {id:uid(),fecha:"",lugar:"",diagnostico:""}; }
+function newPt(){
+  return {
+    id:uid(), cama:"", nombre:"", obraSocial:"",
+    fechaNacimiento:"", edad:"", peso:"", talla:"", percentil:"",
+    pesoNacimiento:"", imc:"", zScore:"", estadoNutricional:"",
+    egNacimiento:"", tipoParto:"", apgar:"", internacionNeonatal:"", otrosPerinatales:"",
+    vacunas:"", internacionesPrevias:[],
+    fechaIngreso:todayISO(), origenIngreso:"", ucipDias:"", ucipTratamientos:"",
+    diagnostico:"", motivoIngreso:"", viaAcceso:"", patologiaBase:"",
+    medicacionBase:[], medicaciones:[], dieta:"", otrasIndicaciones:"",
+    evoluciones:[], estudios:{laboratorio:[],microbiologia:[],imagenes:[],interconsultas:[]},
+    pendientes:[], alertas:[]
+  };
+}
+
+// ── Alertas automáticas ───────────────────────────────────────────────
+function autoAlerts(p){
+  var al=[];
+  (p.medicaciones||[]).forEach(function(m){
+    var n=(m.nombre||"").toLowerCase(), d=diaNum(m.fechaInicio);
+    var isCort=CORTICOIDS.some(function(c){return n.includes(c);}), isDiclo=n.includes("diclofenac");
+    if((isCort||isDiclo)&&d>5) al.push({level:3,text:(isCort?"CTC":"AINE")+": "+esc(m.nombre)+" — Día "+d});
+    else if((isCort||isDiclo)&&d>=4) al.push({level:2,text:(isCort?"CTC":"AINE")+": "+esc(m.nombre)+" — Día "+d+" (próx.)"});
+  });
+  var nut=(p.estadoNutricional||"").toLowerCase();
+  if(nut.includes("desnutri")) al.push({level:2,text:"Nutrición: "+esc(p.estadoNutricional)});
+  if(nut==="obesidad") al.push({level:2,text:"Nutrición: Obesidad"});
+  if(nut==="sobrepeso") al.push({level:1,text:"Nutrición: Sobrepeso"});
+  if((p.patologiaBase||"").trim()) al.push({level:1,text:"Enf. base: "+esc(p.patologiaBase)});
+  return al;
+}
+function alertLevel(p){ var al=autoAlerts(p); return al.length?Math.max.apply(null,al.map(function(a){return a.level;})):0; }
+function levelCls(lv){ return ["lv0","lv1","lv2","lv3"][lv]||"lv0"; }
+
+// ── Firebase ──────────────────────────────────────────────────────────
+function loadData(){
+  ptsCol.onSnapshot(function(snap){ S.patients=snap.docs.map(function(d){return d.data();}); onSnap(); },function(e){alert("Error: "+e.message);});
+  dcCol.onSnapshot(function(snap){ S.discharged=snap.docs.map(function(d){return d.data();}); onSnap(); },function(e){alert("Error: "+e.message);});
+}
+function onSnap(){
+  loadCount++;
+  if(S.loading&&loadCount>=2){S.loading=false;render();return;}
+  if(!S.loading&&S.view!=="edit"&&S.view!=="new"){showSync(true);setTimeout(function(){showSync(false);},1200);render();}
+}
+function fbSet(col,id,data,ok,err){ col.doc(id).set(data).then(ok||noop).catch(err||function(e){alert("Error: "+e.message);}); }
+function fbDel(col,id,ok,err){ col.doc(id).delete().then(ok||noop).catch(err||function(e){alert("Error: "+e.message);}); }
+function fbBatch(ops,ok,err){
+  var b=db.batch();
+  ops.forEach(function(op){ if(op.type==="set") b.set(op.col.doc(op.id),op.data); else b.delete(op.col.doc(op.id)); });
+  b.commit().then(ok||noop).catch(err||function(e){alert("Error: "+e.message);});
+}
+function scheduleAutoSave(){
+  if(S.saveTimer) clearTimeout(S.saveTimer);
+  setSaveInd("saving");
+  S.saveTimer=setTimeout(function(){
+    if(!S.draft) return;
+    fbSet(ptsCol,S.draft.id,clone(S.draft),function(){setSaveInd("ok");setTimeout(function(){setSaveInd("");},2000);});
+  },900);
+}
+function setSaveInd(st){
+  var el=document.getElementById("save-ind"); if(!el) return;
+  el.className="save-ind"+(st==="ok"?" saved-ok":"");
+  el.textContent=st==="saving"?"guardando…":st==="ok"?"✓ guardado":"";
+}
+
+// ── Router ────────────────────────────────────────────────────────────
+function go(view,extra){
+  S.prev=S.view; S.view=view; S.altaConfirm=false; S.delConfirm=null;
+  if(extra) Object.keys(extra).forEach(function(k){S[k]=extra[k];});
+  render();
+}
+function render(){
+  var app=document.getElementById("app");
+  if(S.loading){app.innerHTML='<div class="loading"><div class="spinner"></div>Conectando…</div>';return;}
+  var fn={mapa:vMapa,lista:vLista,detail:vDetail,edit:vEdit,new:vNew,historial:vHistorial};
+  app.innerHTML=(fn[S.view]||vMapa)()+botNav();
+}
+function botNav(){
+  var tabs=[["mapa","🗺️","Mapa"],["lista","📋","Lista"],["historial","📚","Historial"],["_pdf","🖨️","PDF"]];
+  return '<div class="bot-nav no-print">'+tabs.map(function(t){
+    var fn=t[0]==="_pdf"?"printPase()":"go('"+t[0]+"')";
+    return '<button class="nav-btn'+(S.view===t[0]?" active":"")+'" onclick="'+fn+'"><span class="ico">'+t[1]+'</span>'+t[2]+'</button>';
+  }).join("")+'</div>';
+}
+
+// ── Vista: MAPA ───────────────────────────────────────────────────────
+function vMapa(){
+  var pts=S.patients.slice().sort(function(a,b){return Number(a.cama)-Number(b.cama);});
+  var total=Math.max(8,Math.ceil((pts.length+2)/4)*4);
+  var cells=pts.map(function(p){
+    var lv=alertLevel(p), al=autoAlerts(p);
+    var dots=al.slice(0,3).map(function(a){return '<span class="dot '+(a.level===3?"dot-r":a.level===2?"dot-o":"dot-y")+'" title="'+a.text+'"></span>';}).join("")+
+      (p.alertas||[]).slice(0,2).map(function(a){return '<span class="dot dot-b" title="'+esc(a)+'"></span>';}).join("");
+    return '<div class="bed-card '+levelCls(lv)+'" onclick="openDetail(\''+p.id+'\')">'+
+      '<div><div><span class="bed-num">'+esc(p.cama)+'</span>'+(p.origenIngreso==="Post-UCIP"?'<span class="tag-ucip">UCIP</span>':'')+'</div>'+
+      '<div class="bed-name">'+esc(p.nombre)+'</div>'+
+      '<div class="bed-dx">'+esc(p.diagnostico)+'</div></div>'+
+      '<div class="bed-footer"><span class="bed-days">'+diasDesde(p.fechaIngreso)+'</span><div class="alert-dots">'+dots+'</div></div>'+
+    '</div>';
+  }).join("");
+  var empty=''; for(var i=pts.length;i<total;i++) empty+='<div class="bed-card empty add-bed" onclick="goNew()">＋</div>';
+  return '<div class="screen"><div class="hdr"><div class="hdr-row">'+
+    '<div><div class="hdr-sub">Sanatorio 9 de Julio</div><div class="hdr-title">Piso de Pediatría</div><div class="hdr-date">'+today()+'</div></div>'+
+    '<div class="hdr-cnt"><div class="hdr-num">'+pts.length+'</div><div class="hdr-lbl">internado'+(pts.length!==1?'s':'')+'</div></div>'+
+    '</div></div><div class="map-grid">'+cells+empty+'</div></div>';
+}
+
+// ── Vista: LISTA ──────────────────────────────────────────────────────
+function vLista(){
+  var q=S.search.toLowerCase();
+  var pts=S.patients.filter(function(p){return [p.nombre,p.cama,p.diagnostico,p.obraSocial].some(function(v){return (v||"").toLowerCase().includes(q);});})
+    .sort(function(a,b){return Number(a.cama)-Number(b.cama);});
+  var cards=pts.length===0?'<div class="empty-st">'+(q?"Sin resultados.":"Sin pacientes. Tocá ＋ para agregar.")+'</div>'
+    :pts.map(function(p){
+      var lv=alertLevel(p), al=autoAlerts(p);
+      var alBadge=al.length?'<div style="font-size:10px;color:'+(lv===3?"var(--red)":lv===2?"var(--orange)":"var(--warn)")+'">⚠ '+al.length+' alerta'+(al.length>1?'s':'')+'</div>':"";
+      var chips=(p.alertas||[]).slice(0,3).map(function(a){return '<span class="chip-sm '+(CHIP_CLS[a]||"chip-off")+'">'+esc(a)+'</span>';}).join("");
+      if(S.delConfirm===p.id) return '<div class="pt-card" style="cursor:default"><div style="flex:1;display:flex;align-items:center;gap:8px"><span style="font-size:13px;flex:1">¿Eliminar a <b>'+esc(p.nombre)+'</b>?</span><button class="btn-sm btn-red" onclick="confirmDel(\''+p.id+'\')">Sí</button><button class="btn-sm" style="background:#f1f5f9;color:var(--gray)" onclick="setDel(null)">No</button></div></div>';
+      return '<div class="pt-card '+levelCls(lv)+'" onclick="openDetail(\''+p.id+'\')">'+
+        '<div class="cama-tag">'+esc(p.cama)+'</div>'+
+        '<div class="pt-info"><div class="pt-name">'+esc(p.nombre)+(p.origenIngreso==="Post-UCIP"?'<span class="tag-ucip">Post-UCIP</span>':'')+'</div>'+
+        '<div class="pt-sub">'+[esc(p.edad),esc(p.peso),esc(p.obraSocial)].filter(Boolean).join(' · ')+'</div>'+
+        '<div class="pt-dx">'+esc(p.diagnostico)+'</div>'+
+        (chips?'<div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">'+chips+'</div>':'')+
+        '</div><div class="pt-right"><span class="days-pill">'+diasDesde(p.fechaIngreso)+'</span>'+alBadge+
+        '<button onclick="event.stopPropagation();setDel(\''+p.id+'\')" style="background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:16px">✕</button></div></div>';
+    }).join("");
+  return '<div class="screen"><div class="hdr" style="padding-bottom:10px"><div class="hdr-row">'+
+    '<div><div class="hdr-sub">Sanatorio 9 de Julio</div><div class="hdr-title">Lista de Pacientes</div></div>'+
+    '<button onclick="goNew()" style="background:rgba(255,255,255,.2);border:none;color:white;padding:8px 14px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer">＋ Nuevo</button>'+
+    '</div><input class="search-inp" placeholder="Buscar nombre, cama, diagnóstico…" value="'+esc(S.search)+'" oninput="setSearch(this.value)">'+
+    '</div><div class="list-wrap">'+cards+'</div></div>';
+}
+
+// ── Vista: DETALLE ────────────────────────────────────────────────────
+function vDetail(){
+  var p=S.selPt; if(!p) return vMapa();
+  var al=autoAlerts(p);
+  var crit=al.filter(function(a){return a.level===3;}), warn=al.filter(function(a){return a.level<3;});
+  var alertHtml="";
+  if(crit.length) alertHtml+='<div class="auto-alerts"><div class="auto-alert-title">⚠ Alertas críticas</div>'+crit.map(function(a){return '<div class="auto-alert-item">🔴 '+a.text+'</div>';}).join("")+'</div>';
+  if(warn.length) alertHtml+='<div class="auto-alerts warn"><div class="auto-alert-title warn">⚠ Alertas de atención</div>'+warn.map(function(a){return '<div class="auto-alert-item warn">🟡 '+a.text+'</div>';}).join("")+'</div>';
+
+  function sec(id,icon,title,body){
+    var open=SECS[id]!==false;
+    return '<div class="sec"><div class="sec-hdr" onclick="toggleSec(\''+id+'\')"><span>'+icon+' '+title+'</span><span>'+(open?'▲':'▼')+'</span></div>'+(open?'<div class="sec-body">'+body+'</div>':'')+' </div>';
+  }
+  function fv(k,lbl){ var v=p[k]||""; return '<div class="field"><div class="flbl">'+lbl+'</div><div class="fval'+(v?'':' empty')+'">'+esc(v||'–')+'</div></div>'; }
+  function fv2(k1,l1,k2,l2){ return '<div class="row2">'+fv(k1,l1)+fv(k2,l2)+'</div>'; }
+
+  // Medicación agrupada por tipo
+  function medGrupo(arr){
+    if(!arr||!arr.length) return '<div class="fval empty">–</div>';
+    var groups={};
+    arr.forEach(function(m){ var t=m.tipo||"Otro"; if(!groups[t]) groups[t]=[]; groups[t].push(m); });
+    return Object.keys(groups).map(function(tipo){
+      return '<div class="med-group-hdr">'+esc(tipo)+'</div>'+groups[tipo].map(function(m){
+        var dn=diaNum(m.fechaInicio), dcls=dn>5?"danger":dn>=4?"warn":"";
+        return '<div class="med-item"><div class="med-row"><div><div class="med-name">'+esc(m.nombre)+'</div><div class="med-sub">'+[esc(m.dosis),esc(m.via),m.frecuencia?"– "+esc(m.frecuencia):""].filter(Boolean).join(" ")+'</div></div>'+(m.fechaInicio?'<span class="day-pill '+dcls+'">Día '+dn+'</span>':'')+' </div></div>';
+      }).join("");
+    }).join("");
+  }
+
+  // Evoluciones como timeline
+  var evols=(p.evoluciones||[]).slice().sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
+  var evolHtml=evols.length?evols.map(function(ev){return '<div class="evol-entry"><div class="evol-fecha">'+esc(ev.fecha)+'</div><div class="evol-desc">'+esc(ev.descripcion)+'</div></div>';}).join(""):'<div class="fval empty">Sin entradas</div>';
+
+  // Estudios agrupados
+  var estHtml=ESTUDIO_GRP.map(function(g){
+    var arr=((p.estudios||{})[g.key]||[]);
+    return arr.length?'<div class="estudio-grupo-hdr">'+g.lbl+'</div>'+arr.map(function(e){return '<div class="estudio-item"><div class="estudio-fecha">'+esc(e.fecha)+'</div><div class="estudio-inf">'+esc(e.informe)+'</div></div>';}).join(""):"";
+  }).join("") || '<div class="fval empty">–</div>';
+
+  // Pendientes con checkbox interactivo
+  var pendHtml=(p.pendientes||[]).length?(p.pendientes||[]).map(function(pt){
+    return '<div class="pend-item"><input type="checkbox" class="pend-cb"'+(pt.done?" checked":"")+' onchange="togglePendienteDetail(\''+pt.id+'\')"><span class="pend-txt'+(pt.done?" done":"")+'">'+esc(pt.texto)+'</span></div>';
+  }).join(""):'<div class="fval empty">–</div>';
+
+  var manChips=(p.alertas||[]).map(function(a){return '<span class="chip '+(CHIP_CLS[a]||"chip-off")+'">'+esc(a)+'</span>';}).join("")||'<span class="fval empty">Ninguna</span>';
+  var ucip=p.origenIngreso==="Post-UCIP"?fv2("ucipDias","Días en UCIP","ucipTratamientos","Tratamientos previos"):"";
+
+  return '<div class="screen"><div class="sticky-hdr">'+
+    '<button class="back-btn" onclick="go(\''+S.prev+'\')">← atrás</button>'+
+    '<div class="hdr-center"><span class="cama-badge">'+esc(p.cama)+'</span><span class="hdr-name">'+esc(p.nombre)+'</span>'+(p.origenIngreso==="Post-UCIP"?'<span class="tag-ucip">Post-UCIP</span>':'')+'</div>'+
+    '<button class="edit-btn" onclick="openEdit()">✏️ Editar</button>'+
+    '</div><div class="detail-wrap">'+alertHtml+
+    sec("dat","👤","Datos del paciente",fv2("cama","Cama","obraSocial","Obra social")+fv2("edad","Edad","fechaNacimiento","F. nacimiento")+fv2("fechaIngreso","F. ingreso","origenIngreso","Origen")+ucip)+
+    sec("per","🍼","Antecedentes perinatales",
+      fv2("egNacimiento","E.G. nacimiento","tipoParto","Tipo de parto")+
+      fv2("apgar","Apgar","internacionNeonatal","Internación neonatal")+
+      fv("otrosPerinatales","Otros perinatales")+
+      fv("vacunas","Esquema de vacunas")+
+      '<div class="field"><div class="flbl">Internaciones previas</div>'+
+      ((p.internacionesPrevias||[]).length===0
+        ? '<div class="fval empty">–</div>'
+        : (p.internacionesPrevias||[]).map(function(it){
+            return '<div class="estudio-item">'+
+              '<div class="estudio-fecha">'+esc(it.fecha)+(it.lugar?' — <b>'+esc(it.lugar)+'</b>':'')+'</div>'+
+              '<div class="estudio-inf">'+esc(it.diagnostico)+'</div></div>';
+          }).join(""))+
+      '</div>')+
+    sec("ant","📏","Antropometría",fv2("peso","Peso","talla","Talla")+fv2("percentil","Percentil","pesoNacimiento","Peso nacimiento")+fv2("imc","IMC","zScore","Z-score")+fv("estadoNutricional","Estado nutricional"))+
+    sec("cli","🏥","Clínico",fv("diagnostico","Diagnóstico")+fv("motivoIngreso","Motivo de internación")+fv2("viaAcceso","Vía de acceso","patologiaBase","Patología de base"))+
+    sec("med","💊","Medicación",'<div class="flbl">Medicación de base</div>'+medGrupo(p.medicacionBase)+'<div class="flbl" style="margin-top:10px">Medicación activa (por tipo)</div>'+medGrupo(p.medicaciones)+fv("dieta","Dieta")+fv("otrasIndicaciones","Otras indicaciones"))+
+    sec("evo","📝","Evoluciones",evolHtml)+
+    sec("est","🔬","Estudios",estHtml)+
+    sec("pen","✅","Pendientes / Tareas",pendHtml)+
+    sec("alc","⚠️","Alertas manuales",'<div class="chips">'+manChips+'</div>')+
+    '</div><div class="sticky-bot">'+(S.altaConfirm?altaFormHtml(p):'<button class="btn btn-red-o" onclick="setAlta(true)">Dar de alta</button>')+
+    '</div></div>';
+}
+
+function altaFormHtml(p){
+  function sel(arr,val,fn){ return '<select style="flex:1;border:1.5px solid var(--border);border-radius:9px;padding:7px 10px;font-size:12px;outline:none;font-family:inherit" onchange="'+fn+'(this.value)"><option value="">– Seleccioná –</option>'+arr.map(function(t){return '<option'+(val===t?" selected":"")+'>'+esc(t)+'</option>';}).join("")+'</select>'; }
+  var ok=S.tipoAlta&&S.destinoAlta;
+  return '<div style="font-size:12px;font-weight:700;margin-bottom:6px">Alta: '+esc(p.nombre)+'</div>'+
+    '<div style="display:flex;gap:6px;margin-bottom:6px">'+sel(TIPOS_ALTA,S.tipoAlta,"setTipoAlta")+'<span style="font-size:11px;color:var(--gray);align-self:center">tipo</span></div>'+
+    '<div style="display:flex;gap:6px;margin-bottom:6px">'+sel(DESTINOS,S.destinoAlta,"setDestinoAlta")+'<span style="font-size:11px;color:var(--gray);align-self:center">destino</span></div>'+
+    '<div style="display:flex;gap:6px"><button id="btn-alta-ok" class="btn-sm btn-red" onclick="doAlta()"'+(ok?"":" disabled style=\"opacity:.4\"")+'> Confirmar alta </button>'+
+    '<button class="btn-sm" style="background:#f1f5f9;color:var(--gray)" onclick="setAlta(false)">Cancelar</button></div>';
+}
+
+// ── Vista: EDITAR / NUEVO ─────────────────────────────────────────────
+function vEdit(){
+  var d=S.draft; if(!d) return vMapa();
+  return '<div class="screen"><div class="sticky-hdr">'+
+    '<button class="back-btn" onclick="go(\'detail\')">← atrás</button>'+
+    '<div class="hdr-center"><span class="cama-badge">'+esc(d.cama||"–")+'</span><span class="hdr-name">'+esc(d.nombre||"Editando")+'</span></div>'+
+    '<div id="save-ind" class="save-ind"></div></div>'+
+    '<div class="detail-wrap">'+formHtml(d)+'</div></div>';
+}
+function vNew(){
+  if(!S.draft) S.draft=newPt();
+  return '<div class="screen"><div class="sticky-hdr">'+
+    '<button class="back-btn" onclick="go(\'mapa\')">✕ Cancelar</button>'+
+    '<span style="font-weight:800;font-size:14px">Nuevo paciente</span>'+
+    '<button onclick="saveNew()" style="background:var(--blue);color:white;border:none;border-radius:9px;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer">Agregar</button>'+
+    '</div><div class="detail-wrap">'+formHtml(S.draft)+'</div></div>';
+}
+
+// ── Formulario completo ────────────────────────────────────────────────
+function formHtml(d){
+  function inp(k,lbl,type){ return '<div class="field"><div class="flbl">'+lbl+'</div><input type="'+(type||"text")+'" class="finp" value="'+esc(d[k]||"")+'" oninput="updDraft(\''+k+'\',this.value)" placeholder="'+lbl+'"></div>'; }
+  function ta(k,lbl,r){ return '<div class="field"><div class="flbl">'+lbl+'</div><textarea class="finp" rows="'+(r||3)+'" oninput="updDraft(\''+k+'\',this.value)">'+esc(d[k]||"")+'</textarea></div>'; }
+  function sel(k,lbl,opts){ return '<div class="field"><div class="flbl">'+lbl+'</div><select class="fsel" onchange="updDraft(\''+k+'\',this.value)"><option value="">– Seleccioná –</option>'+opts.map(function(o){return '<option'+(d[k]===o?" selected":"")+'>'+esc(o)+'</option>';}).join("")+'</select></div>'; }
+
+  var chips='<div class="field"><div class="flbl">Alertas manuales</div><div class="chips">'+ALERTAS_CHIP.map(function(a){ var on=(d.alertas||[]).includes(a); return '<button type="button" class="chip '+(on?(CHIP_CLS[a]||""):"chip-off")+'" onclick="toggleAlert(\''+esc(a)+'\')">'+esc(a)+'</button>'; }).join("")+'</div></div>';
+
+  var origBtns='<div class="field"><div class="flbl">Origen de ingreso</div><div class="origin-btns">'+ORIGENES.map(function(o){return '<button type="button" class="orig-btn'+(d.origenIngreso===o?" active":"")+'" onclick="setOrigen(\''+o+'\')">'+esc(o)+'</button>';}).join("")+'</div></div>';
+  var ucipFields=d.origenIngreso==="Post-UCIP"?'<div class="row2">'+inp("ucipDias","Días en UCIP","number")+ta("ucipTratamientos","Tratamientos previos UCIP",2)+'</div>':"";
+
+  // Medicación con tipo
+  function medList(field,wd,lbl){
+    var arr=d[field]||[];
+    return '<div class="field"><div class="flbl">'+lbl+'</div>'+arr.map(function(m,i){
+      var f=esc(field),mid=esc(m.id);
+      return '<div class="med-item edit">'+
+        '<div style="display:flex;gap:5px;align-items:center;margin-bottom:6px">'+
+          (wd?'<select class="minp" style="flex:0 0 100px" onchange="updMed(\''+f+'\',\''+mid+'\',\'tipo\',this.value)"><option value="">Tipo…</option>'+MED_TIPOS.map(function(t){return '<option'+(m.tipo===t?" selected":"")+'>'+t+'</option>';}).join("")+'</select>':'')+
+          '<input class="minp" style="flex:1" placeholder="Medicamento" value="'+esc(m.nombre)+'" oninput="updMed(\''+f+'\',\''+mid+'\',\'nombre\',this.value)">'+
+          '<button class="rm-btn" onclick="rmMed(\''+f+'\',\''+mid+'\')">✕</button>'+
+        '</div>'+
+        '<div class="med-grid">'+
+          '<input class="minp" placeholder="Dosis" value="'+esc(m.dosis||"")+'" oninput="updMed(\''+f+'\',\''+mid+'\',\'dosis\',this.value)">'+
+          '<input class="minp" placeholder="Vía" value="'+esc(m.via||"")+'" oninput="updMed(\''+f+'\',\''+mid+'\',\'via\',this.value)">'+
+          '<input class="minp" placeholder="Frecuencia" value="'+esc(m.frecuencia||"")+'" oninput="updMed(\''+f+'\',\''+mid+'\',\'frecuencia\',this.value)">'+
+          (wd?'<div><div style="font-size:10px;color:#94a3b8;margin-bottom:2px">Fecha inicio</div><input type="date" class="minp" value="'+esc(m.fechaInicio||"")+'" oninput="updMed(\''+f+'\',\''+mid+'\',\'fechaInicio\',this.value)"></div>':'')+
+        '</div></div>';
+    }).join("")+
+    '<button type="button" class="add-med-btn" onclick="addMed(\''+esc(field)+'\','+(wd?'true':'false')+')">+ Agregar '+lbl.toLowerCase()+'</button></div>';
+  }
+
+  // Evoluciones con fecha + descripción
+  var evoluciones=d.evoluciones||[];
+  var evolvHtml='<div class="field"><div class="flbl">Evoluciones del día</div>'+
+    evoluciones.slice().sort(function(a,b){return b.fecha.localeCompare(a.fecha);}).map(function(ev){
+      var eid=esc(ev.id);
+      return '<div style="background:white;border:1.5px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px">'+
+        '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">'+
+          '<input type="date" class="minp" style="flex:0 0 150px" value="'+esc(ev.fecha)+'" oninput="updEvol(\''+eid+'\',\'fecha\',this.value)">'+
+          '<button class="rm-btn" onclick="rmEvol(\''+eid+'\')">✕</button>'+
+        '</div>'+
+        '<textarea class="finp" rows="3" oninput="updEvol(\''+eid+'\',\'descripcion\',this.value)">'+esc(ev.descripcion)+'</textarea>'+
+      '</div>';
+    }).join("")+
+    '<button type="button" class="add-med-btn" onclick="addEvol()">+ Agregar entrada de evolución</button></div>';
+
+  // Estudios agrupados
+  var estudiosHtml='<div class="field">'+ESTUDIO_GRP.map(function(g){
+    var arr=((d.estudios||{})[g.key]||[]);
+    return '<div class="flbl" style="margin-top:10px">'+g.lbl+'</div>'+arr.map(function(e){
+      var eid=esc(e.id);
+      return '<div style="background:white;border:1.5px solid var(--border);border-radius:8px;padding:8px;margin-bottom:5px">'+
+        '<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">'+
+          '<input type="date" class="minp" style="flex:0 0 145px" value="'+esc(e.fecha)+'" oninput="updEstudio(\''+g.key+'\',\''+eid+'\',\'fecha\',this.value)">'+
+          '<button class="rm-btn" onclick="rmEstudio(\''+g.key+'\',\''+eid+'\')">✕</button>'+
+        '</div>'+
+        '<input class="minp" placeholder="Informe / resultado" value="'+esc(e.informe)+'" oninput="updEstudio(\''+g.key+'\',\''+eid+'\',\'informe\',this.value)">'+
+      '</div>';
+    }).join("")+
+    '<button type="button" class="add-med-btn" onclick="addEstudio(\''+g.key+'\')">+ Agregar '+g.lbl.replace(/[^\w\s]/g,"").trim().toLowerCase()+'</button>';
+  }).join("")+'</div>';
+
+  // Pendientes como lista de tareas
+  var pendHtml='<div class="field"><div class="flbl">Pendientes / Tareas</div>'+
+    (d.pendientes||[]).map(function(pt){
+      var pid=esc(pt.id);
+      return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:5px">'+
+        '<input type="checkbox" class="pend-cb"'+(pt.done?" checked":"")+' onchange="togglePendiente(\''+pid+'\')">'+
+        '<input class="minp" style="flex:1'+(pt.done?';text-decoration:line-through;color:#94a3b8':'')+'" placeholder="Tarea o control pendiente" value="'+esc(pt.texto)+'" oninput="updPendiente(\''+pid+'\',this.value)">'+
+        '<button class="rm-btn" onclick="rmPendiente(\''+pid+'\')">✕</button>'+
+      '</div>';
+    }).join("")+
+    '<button type="button" class="add-med-btn" onclick="addPendiente()">+ Agregar pendiente</button></div>';
+
+  return chips+
+    '<div class="form-sec-hdr">👤 Datos del paciente</div>'+
+    '<div class="row2">'+inp("cama","Cama *")+inp("obraSocial","Obra social")+'</div>'+
+    inp("nombre","Apellido y nombre *")+
+    '<div class="row2">'+inp("fechaNacimiento","F. nacimiento","date")+inp("edad","Edad")+'</div>'+
+    '<div class="row2">'+inp("fechaIngreso","F. ingreso","date")+inp("origenIngreso","Origen (texto)")+'</div>'+
+    origBtns+ucipFields+
+    '<div class="form-sec-hdr">🍼 Antecedentes perinatales</div>'+
+    '<div class="row2">'+inp("egNacimiento","E.G. nacimiento (sem)")+sel("tipoParto","Tipo de parto",TIPOS_PARTO)+'</div>'+
+    '<div class="row2">'+inp("apgar","Apgar 1\'/5\'")+inp("internacionNeonatal","Internación neonatal")+'</div>'+
+    ta("otrosPerinatales","Otros antecedentes perinatales",2)+
+    sel("vacunas","Esquema de vacunas",VACUNAS_OPTS)+
+    '<div class="field"><div class="flbl">Internaciones previas</div>'+
+    (d.internacionesPrevias||[]).map(function(it){
+      var iid=esc(it.id);
+      return '<div style="background:white;border:1.5px solid var(--border);border-radius:8px;padding:8px;margin-bottom:6px">'+
+        '<div style="display:flex;gap:5px;align-items:center;margin-bottom:5px">'+
+          '<input type="date" class="minp" style="flex:0 0 145px" value="'+esc(it.fecha)+'" oninput="updInternacion(\''+iid+'\',\'fecha\',this.value)">'+
+          '<input class="minp" style="flex:1" placeholder="Lugar / institución" value="'+esc(it.lugar)+'" oninput="updInternacion(\''+iid+'\',\'lugar\',this.value)">'+
+          '<button class="rm-btn" onclick="rmInternacion(\''+iid+'\')">✕</button>'+
+        '</div>'+
+        '<input class="minp" placeholder="Diagnóstico / motivo" value="'+esc(it.diagnostico)+'" oninput="updInternacion(\''+iid+'\',\'diagnostico\',this.value)">'+
+      '</div>';
+    }).join("")+
+    '<button type="button" class="add-med-btn" onclick="addInternacion()">+ Agregar internación previa</button></div>'+
+    '<div class="form-sec-hdr">📏 Antropometría</div>'+
+    '<div class="row2">'+inp("peso","Peso")+inp("talla","Talla")+'</div>'+
+    '<div class="row2">'+inp("percentil","Percentil")+inp("pesoNacimiento","Peso nacimiento")+'</div>'+
+    '<div class="row2">'+inp("imc","IMC")+inp("zScore","Z-score")+'</div>'+
+    sel("estadoNutricional","Estado nutricional",ESTADOS_NUT)+
+    '<div class="form-sec-hdr">🏥 Clínico</div>'+
+    inp("diagnostico","Diagnóstico")+ta("motivoIngreso","Motivo de internación")+
+    '<div class="row2">'+inp("viaAcceso","Vía de acceso")+inp("patologiaBase","Patología de base")+'</div>'+
+    '<div class="form-sec-hdr">💊 Tratamiento</div>'+
+    medList("medicacionBase",false,"Medicación de base")+
+    medList("medicaciones",true,"Medicación activa (tipo + días)")+
+    inp("dieta","Dieta")+ta("otrasIndicaciones","Otras indicaciones")+
+    '<div class="form-sec-hdr">📝 Evoluciones</div>'+evolvHtml+
+    '<div class="form-sec-hdr">🔬 Estudios</div>'+estudiosHtml+
+    '<div class="form-sec-hdr">✅ Pendientes / Tareas</div>'+pendHtml;
+}
+
+// ── Vista: HISTORIAL ──────────────────────────────────────────────────
+function vHistorial(){
+  var items=S.discharged.length===0?'<div class="empty-st">No hay altas registradas todavía.</div>'
+    :S.discharged.map(function(p){
+      var open=S.histSel===p.id;
+      var dias=p.fechaAlta&&p.fechaIngreso?Math.max(1,Math.floor((new Date(p.fechaAlta)-new Date(p.fechaIngreso))/864e5)+1):"?";
+      var det="";
+      if(open){
+        det='<div class="hist-detail">'+
+          (p.destinoAlta?'<div style="font-size:12px;margin-bottom:4px"><b>Destino:</b> '+esc(p.destinoAlta)+'</div>':'')+
+          (p.diagnostico?'<div style="font-size:12px;margin-bottom:4px"><b>Dx:</b> '+esc(p.diagnostico)+'</div>':'')+
+          (p.patologiaBase?'<div style="font-size:12px;color:var(--warn);margin-bottom:5px">Enf. base: '+esc(p.patologiaBase)+'</div>':'')+
+          '<button class="btn btn-blue-o" style="margin-top:6px" onclick="reingresar(\''+p.id+'\')">Reingresar paciente</button></div>';
+      }
+      return '<div class="hist-card"><div class="hist-top" onclick="toggleHist(\''+p.id+'\')">'+
+        '<div class="hist-meta"><div><div class="hist-name">'+esc(p.nombre)+'</div><div class="hist-sub">Cama '+esc(p.cama)+' · '+esc(p.edad)+' · '+esc(p.diagnostico)+'</div></div>'+
+        '<div class="hist-right"><div class="hist-date">Alta '+new Date(p.fechaAlta+"T12:00:00").toLocaleDateString("es-AR")+'</div><div class="hist-days">'+dias+'d internado</div><div class="hist-tipo">'+esc(p.tipoAlta||"–")+'</div></div></div>'+
+        '<div class="toggle-lbl">'+(open?"ocultar ▲":"ver detalle ▼")+'</div></div>'+det+'</div>';
+    }).join("");
+  return '<div class="screen"><div class="hdr"><div class="hdr-row">'+
+    '<div><div class="hdr-sub">Sanatorio 9 de Julio</div><div class="hdr-title">Historial de altas</div></div>'+
+    '<div class="hdr-cnt"><div class="hdr-num">'+S.discharged.length+'</div><div class="hdr-lbl">alta'+(S.discharged.length!==1?"s":"")+'</div></div>'+
+    '</div></div><div style="padding:10px 12px 6px"><button class="btn btn-blue-o" onclick="exportarCSV()">📥 Exportar historial (CSV/Excel)</button></div>'+
+    '<div style="padding:0 0 20px">'+items+'</div></div>';
+}
+
+// ── Print ─────────────────────────────────────────────────────────────
+function printPase(){
+  var pts=S.patients.slice().sort(function(a,b){return Number(a.cama)-Number(b.cama);});
+  var rows=pts.map(function(p){
+    var al=autoAlerts(p);
+    var alHtml=al.map(function(a){var c=a.level===3?"#dc2626":a.level===2?"#ea580c":"#f59e0b";return '<span style="background:'+c+'20;color:'+c+';border:1px solid '+c+'40;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:700;margin:2px">⚠ '+a.text+'</span>';}).join("");
+    var manAl=(p.alertas||[]).map(function(a){return '<span style="background:#dbeafe;color:#1d4ed8;border-radius:99px;padding:2px 8px;font-size:11px;font-weight:600;margin:2px">'+esc(a)+'</span>';}).join("");
+    // Meds grouped
+    var medGrps={};
+    (p.medicaciones||[]).forEach(function(m){var t=m.tipo||"Otro";if(!medGrps[t])medGrps[t]=[];medGrps[t].push(m);});
+    var medsHtml=Object.keys(medGrps).map(function(tipo){
+      return '<div style="font-size:10px;font-weight:700;color:#1d4ed8;margin:5px 0 2px">'+esc(tipo)+'</div>'+medGrps[tipo].map(function(m,i){
+        var dn=diaNum(m.fechaInicio),c=dn>5?"#dc2626":dn>=4?"#ea580c":"#1d4ed8";
+        return '<div style="display:flex;justify-content:space-between;margin:1px 0;font-size:12px"><span>'+(i+1)+'. <b>'+esc(m.nombre)+'</b> '+esc(m.dosis)+' '+esc(m.via)+(m.frecuencia?' – '+esc(m.frecuencia):'')+'</span>'+(m.fechaInicio?'<span style="background:'+c+';color:white;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:700">Día '+dn+'</span>':'')+' </div>';
+      }).join("");
+    }).join("");
+    // Last evolution entry
+    var lastEvol=(p.evoluciones||[]).sort(function(a,b){return b.fecha.localeCompare(a.fecha);})[0];
+    // Pending tasks
+    var pendPrint=(p.pendientes||[]).filter(function(pt){return !pt.done;}).map(function(pt){return '<div style="font-size:12px">☐ '+esc(pt.texto)+'</div>';}).join("");
+    return '<div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;margin-bottom:12px;page-break-inside:avoid">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:4px">'+
+        '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+          '<span style="background:#1d4ed8;color:white;font-weight:800;padding:3px 10px;border-radius:8px;font-size:13px">Cama '+esc(p.cama)+'</span>'+
+          '<b style="font-size:14px">'+esc(p.nombre)+'</b>'+
+          '<span style="color:#6b7280;font-size:12px">'+[esc(p.edad),esc(p.peso),esc(p.talla)].filter(Boolean).join(' · ')+'</span>'+
+          (p.origenIngreso==="Post-UCIP"?'<span style="background:#ede9fe;color:#7c3aed;border-radius:99px;font-size:11px;font-weight:700;padding:2px 8px">Post-UCIP</span>':'')+
+        '</div><span style="color:#94a3b8;font-size:11px">'+diasDesde(p.fechaIngreso)+'</span>'+
+      '</div>'+
+      '<div style="font-size:13px;margin-bottom:3px"><b>Dx:</b> '+esc(p.diagnostico)+'</div>'+
+      (p.patologiaBase?'<div style="font-size:12px;color:#d97706;margin-bottom:3px">Base: '+esc(p.patologiaBase)+'</div>':'')+
+      (alHtml?'<div style="margin:4px 0">'+alHtml+'</div>':'')+
+      (manAl?'<div style="margin:3px 0">'+manAl+'</div>':'')+
+      (medsHtml?'<div style="border-top:1px solid #f1f5f9;margin-top:6px;padding-top:6px">'+medsHtml+'</div>':'')+
+      '<div style="border-top:1px solid #f1f5f9;margin-top:6px;padding-top:6px;font-size:12px;line-height:1.7">'+
+        (p.dieta?'<div><b>Dieta:</b> '+esc(p.dieta)+'</div>':'')+
+        (lastEvol?'<div><b>Evolución '+esc(lastEvol.fecha)+':</b> '+esc(lastEvol.descripcion)+'</div>':'')+
+        (pendPrint?'<div><b>Pendientes:</b></div>'+pendPrint:'')+
+      '</div>'+
+      (p.viaAcceso?'<div style="margin-top:3px;font-size:11px;color:#94a3b8">Acceso: '+esc(p.viaAcceso)+'</div>':'')+
+    '</div>';
+  }).join("");
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Pase de Guardia</title><style>body{font-family:Arial,sans-serif;padding:20px;color:#111;max-width:800px;margin:0 auto}@media print{.np{display:none}}</style></head><body>'+
+    '<div class="np" style="margin-bottom:16px"><button onclick="window.print()" style="background:#1d4ed8;color:white;border:none;padding:8px 20px;border-radius:8px;font-size:13px;cursor:pointer">🖨 Imprimir / PDF</button></div>'+
+    '<div style="text-align:center;margin-bottom:20px"><div style="font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:2px;text-transform:uppercase">Sanatorio 9 de Julio — Pediatría</div>'+
+    '<h1 style="margin:6px 0;font-size:22px">PASE DE GUARDIA</h1><p style="color:#6b7280;font-size:13px;text-transform:capitalize">'+today()+'</p>'+
+    '<p style="font-size:13px;font-weight:700">'+pts.length+' paciente'+(pts.length!==1?'s':'')+' internado'+(pts.length!==1?'s':'')+'</p></div>'+rows+
+    '<p style="text-align:center;font-size:10px;color:#d1d5db;margin-top:16px">'+new Date().toLocaleString("es-AR")+'</p></body></html>';
+  var w=window.open("","_blank"); if(w){w.document.write(html);w.document.close();} else alert("Habilitá popups para este sitio.");
+}
+
+// ── Export CSV ────────────────────────────────────────────────────────
+function exportarCSV(){
+  if(!S.discharged.length){alert("No hay altas en el historial.");return;}
+  function fmt(arr){return (arr||[]).map(function(m){return (m.tipo?m.tipo+": ":"")+[m.nombre,m.dosis,m.via,m.frecuencia].filter(Boolean).join(" ");}).join(" | ");}
+  var headers=["Fecha alta","Tipo alta","Destino alta","Cama","Nombre","Obra social","Edad","Peso","Talla","Percentil","Peso nac.","IMC","Z-score","Est.nutricional","EG nac.","Tipo parto","Apgar","Int.neonatal","Vacunas","F.Ingreso","Días","Origen","Días UCIP","Diagnóstico","Motivo","Pat.base","Med.base","Vía","Med.alta","Dieta","Última evolución","Alertas"];
+  var rows=S.discharged.map(function(p){
+    var dias=p.fechaAlta&&p.fechaIngreso?Math.max(1,Math.floor((new Date(p.fechaAlta)-new Date(p.fechaIngreso))/864e5)+1):"";
+    var lastEvol=((p.evoluciones||[]).sort(function(a,b){return b.fecha.localeCompare(a.fecha);})[0]||{});
+    return [p.fechaAlta,p.tipoAlta,p.destinoAlta,p.cama,p.nombre,p.obraSocial,p.edad,p.peso,p.talla,p.percentil,p.pesoNacimiento,p.imc,p.zScore,p.estadoNutricional,p.egNacimiento,p.tipoParto,p.apgar,p.internacionNeonatal,p.vacunas,p.fechaIngreso,dias,p.origenIngreso,p.ucipDias,p.diagnostico,p.motivoIngreso,p.patologiaBase,fmt(p.medicacionBase),p.viaAcceso,fmt(p.medicaciones),p.dieta,(lastEvol.fecha||"")+" "+esc(lastEvol.descripcion||""),(p.alertas||[]).join(", ")];
+  });
+  var csv="\uFEFF"+[headers].concat(rows).map(function(r){return r.map(function(v){return '"'+String(v||"").replace(/"/g,'""')+'"';}).join(",");}).join("\r\n");
+  var a=document.createElement("a"); a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv); a.download="historial_"+todayISO()+".csv"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+// ── Handlers ──────────────────────────────────────────────────────────
+function setSearch(v){S.search=v;render();}
+function setDel(id){S.delConfirm=id;render();}
+function setAlta(v){S.altaConfirm=v;if(!v){S.tipoAlta="";S.destinoAlta="";}render();}
+function toggleHist(id){S.histSel=S.histSel===id?null:id;render();}
+function toggleSec(id){SECS[id]=SECS[id]===false?true:false;render();}
+function goNew(){S.draft=newPt();go("new");}
+function openDetail(id){ var p=S.patients.find(function(x){return x.id===id;}); if(p) go("detail",{selPt:clone(p)}); }
+function openEdit(){ S.draft=clone(S.selPt); go("edit"); }
+
+function setTipoAlta(v){S.tipoAlta=v;var b=document.getElementById("btn-alta-ok");if(b){var ok=S.tipoAlta&&S.destinoAlta;b.disabled=!ok;b.style.opacity=ok?"1":"0.4";}}
+function setDestinoAlta(v){S.destinoAlta=v;var b=document.getElementById("btn-alta-ok");if(b){var ok=S.tipoAlta&&S.destinoAlta;b.disabled=!ok;b.style.opacity=ok?"1":"0.4";}}
+function setOrigen(v){ if(!S.draft) return; S.draft.origenIngreso=v; var fw=document.querySelector(".detail-wrap"); if(fw) fw.innerHTML=formHtml(S.draft); if(S.view==="edit") scheduleAutoSave(); }
+
+function updDraft(k,v){ if(!S.draft) return; S.draft[k]=v; if(S.view==="edit") scheduleAutoSave(); }
+function toggleAlert(a){
+  if(!S.draft) return;
+  var al=S.draft.alertas||[];
+  S.draft.alertas=al.includes(a)?al.filter(function(x){return x!==a;}):al.concat([a]);
+  var el=document.querySelector(".chips"); if(el) el.innerHTML=ALERTAS_CHIP.map(function(x){var on=S.draft.alertas.includes(x);return '<button type="button" class="chip '+(on?(CHIP_CLS[x]||""):"chip-off")+'" onclick="toggleAlert(\''+esc(x)+'\')">'+esc(x)+'</button>';}).join("");
+  if(S.view==="edit") scheduleAutoSave();
+}
+
+// Meds
+function addMed(field,wd){ if(!S.draft) return; S.draft[field]=(S.draft[field]||[]).concat([newMed(wd)]); var fw=document.querySelector(".detail-wrap"); if(fw) fw.innerHTML=formHtml(S.draft); if(S.view==="edit") scheduleAutoSave(); }
+function rmMed(field,id){ if(!S.draft) return; S.draft[field]=(S.draft[field]||[]).filter(function(m){return m.id!==id;}); var fw=document.querySelector(".detail-wrap"); if(fw) fw.innerHTML=formHtml(S.draft); if(S.view==="edit") scheduleAutoSave(); }
+function updMed(field,id,k,v){ if(!S.draft) return; S.draft[field]=(S.draft[field]||[]).map(function(m){return m.id===id?Object.assign({},m,{[k]:v}):m;}); if(S.view==="edit") scheduleAutoSave(); }
+
+// Evoluciones
+function addEvol(){ if(!S.draft) return; S.draft.evoluciones=(S.draft.evoluciones||[]).concat([newEvol()]); var fw=document.querySelector(".detail-wrap"); if(fw) fw.innerHTML=formHtml(S.draft); if(S.view==="edit") scheduleAutoSave(); }
+function rmEvol(id){ if(!S.draft) return; S.draft.evoluciones=(S.draft.evoluciones||[]).filter(function(e){return e.id!==id;}); var fw=document.querySelector(".detail-wrap"); if(fw) fw.innerHTML=formHtml(S.draft); if(S.view==="edit") scheduleAutoSave(); }
+function updEvol(id,k,v){ if(!S.draft) return; S.draft.evoluciones=(S.draft.evoluciones||[]).map(function(e){return e.id===id?Object.assign({},e,{[k]:v}):e;}); if(S.view==="edit") scheduleAutoSave(); }
+
+// Estudios
+function addEstudio(grupo){ if(!S.draft) return; if(!S.draft.estudios) S.draft.estudios={laboratorio:[],microbiologia:[],imagenes:[],interconsultas:[]}; S.draft.estudios[grupo]=(S.draft.estudios[grupo]||[]).concat([newEstudio()]); var fw=document.querySelector(".detail-wrap"); if(fw) fw.innerHTML=formHtml(S.draft); if(S.view==="edit") scheduleAutoSave(); }
+function rmEstudio(grupo,id){ if(!S.draft||!S.draft.estudios) return; S.draft.estudios[grupo]=(S.draft.estudios[grupo]||[]).filter(function(e){return e.id!==id;}); var fw=document.querySelector(".detail-wrap"); if(fw) fw.innerHTML=formHtml(S.draft); if(S.view==="edit") scheduleAutoSave(); }
+function updEstudio(grupo,id,k,v){ if(!S.draft||!S.draft.estudios) return; S.draft.estudios[grupo]=(S.draft.estudios[grupo]||[]).map(function(e){return e.id===id?Object.assign({},e,{[k]:v}):e;}); if(S.view==="edit") scheduleAutoSave(); }
+
+// Internaciones previas
+function addInternacion(){ if(!S.draft) return; S.draft.internacionesPrevias=(S.draft.internacionesPrevias||[]).concat([newInternacion()]); var fw=document.querySelector(".detail-wrap"); if(fw) fw.innerHTML=formHtml(S.draft); if(S.view==="edit") scheduleAutoSave(); }
+function rmInternacion(id){ if(!S.draft) return; S.draft.internacionesPrevias=(S.draft.internacionesPrevias||[]).filter(function(it){return it.id!==id;}); var fw=document.querySelector(".detail-wrap"); if(fw) fw.innerHTML=formHtml(S.draft); if(S.view==="edit") scheduleAutoSave(); }
+function updInternacion(id,k,v){ if(!S.draft) return; S.draft.internacionesPrevias=(S.draft.internacionesPrevias||[]).map(function(it){return it.id===id?Object.assign({},it,{[k]:v}):it;}); if(S.view==="edit") scheduleAutoSave(); }
+
+// Pendientes
+function addPendiente(){ if(!S.draft) return; S.draft.pendientes=(S.draft.pendientes||[]).concat([newPend()]); var fw=document.querySelector(".detail-wrap"); if(fw) fw.innerHTML=formHtml(S.draft); if(S.view==="edit") scheduleAutoSave(); }
+function rmPendiente(id){ if(!S.draft) return; S.draft.pendientes=(S.draft.pendientes||[]).filter(function(p){return p.id!==id;}); var fw=document.querySelector(".detail-wrap"); if(fw) fw.innerHTML=formHtml(S.draft); if(S.view==="edit") scheduleAutoSave(); }
+function updPendiente(id,v){ if(!S.draft) return; S.draft.pendientes=(S.draft.pendientes||[]).map(function(p){return p.id===id?Object.assign({},p,{texto:v}):p;}); if(S.view==="edit") scheduleAutoSave(); }
+function togglePendiente(id){ if(!S.draft) return; S.draft.pendientes=(S.draft.pendientes||[]).map(function(p){return p.id===id?Object.assign({},p,{done:!p.done}):p;}); if(S.view==="edit") scheduleAutoSave(); }
+function togglePendienteDetail(id){
+  if(!S.selPt) return;
+  S.selPt.pendientes=(S.selPt.pendientes||[]).map(function(p){return p.id===id?Object.assign({},p,{done:!p.done}):p;});
+  fbSet(ptsCol,S.selPt.id,clone(S.selPt));
+  // update local state
+  S.patients=S.patients.map(function(p){return p.id===S.selPt.id?clone(S.selPt):p;});
+  render();
+}
+
+// CRUD
+function saveNew(){
+  if(!S.draft||!S.draft.nombre.trim()||!S.draft.cama.trim()){alert("Completá nombre y cama.");return;}
+  var pt=clone(Object.assign({},S.draft,{id:uid()}));
+  var btn=document.querySelector('[onclick="saveNew()"]'); if(btn){btn.disabled=true;btn.textContent="Guardando…";}
+  fbSet(ptsCol,pt.id,pt,function(){S.draft=null;go("mapa");},function(e){if(btn){btn.disabled=false;btn.textContent="Agregar";}alert("Error: "+e.message);});
+}
+function confirmDel(id){ fbDel(ptsCol,id,function(){S.delConfirm=null;},function(e){alert("Error: "+e.message);}); }
+function doAlta(){
+  if(!S.tipoAlta||!S.destinoAlta){alert("Seleccioná tipo y destino.");return;}
+  if(S.saveTimer){clearTimeout(S.saveTimer);S.saveTimer=null;}
+  var btn=document.getElementById("btn-alta-ok"); if(btn){btn.disabled=true;btn.textContent="Guardando…";}
+  var p=clone(Object.assign({},S.selPt,{fechaAlta:todayISO(),tipoAlta:S.tipoAlta,destinoAlta:S.destinoAlta}));
+  fbBatch([{type:"set",col:dcCol,id:p.id,data:p},{type:"del",col:ptsCol,id:S.selPt.id}],
+    function(){S.tipoAlta="";S.destinoAlta="";go("mapa");},
+    function(e){if(btn){btn.disabled=false;btn.textContent="Confirmar alta";}alert("Error: "+e.message);});
+}
+function reingresar(id){
+  var p=S.discharged.find(function(x){return x.id===id;}); if(!p) return;
+  var r=clone(p); delete r.fechaAlta;delete r.tipoAlta;delete r.destinoAlta; r.id=uid(); r.fechaIngreso=todayISO();
+  fbBatch([{type:"set",col:ptsCol,id:r.id,data:r},{type:"del",col:dcCol,id:id}],
+    function(){S.histSel=null;go("lista");},function(e){alert("Error: "+e.message);});
+}
+
+// ── Init ──────────────────────────────────────────────────────────────
+loadData();
+</script>
+</body>
+</html>
