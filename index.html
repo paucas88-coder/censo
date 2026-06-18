@@ -200,7 +200,7 @@ var loadCount = 0;
 
 // ── Utils ─────────────────────────────────────────────────────────────
 function uid()    { return Date.now()+"_"+Math.random().toString(36).slice(2); }
-function todayISO(){ return new Date().toISOString().split("T")[0]; }
+function todayISO(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function today()  { return new Date().toLocaleDateString("es-AR",{weekday:"long",year:"numeric",month:"long",day:"numeric"}); }
 function diasDesde(f){ var d=Math.floor((Date.now()-new Date(f))/864e5); return d===0?"hoy":d+"d"; }
 function diaNum(f){ if(!f) return 0; return Math.max(1,Math.floor((Date.now()-new Date(f))/864e5)+1); }
@@ -270,7 +270,13 @@ function scheduleAutoSave(){
   setSaveInd("saving");
   S.saveTimer=setTimeout(function(){
     if(!S.draft) return;
-    fbSet(ptsCol,S.draft.id,clone(S.draft),function(){setSaveInd("ok");setTimeout(function(){setSaveInd("");},2000);});
+    var saved=clone(S.draft);
+    fbSet(ptsCol,saved.id,saved,function(){
+      setSaveInd("ok");
+      S.selPt=saved;
+      S.patients=S.patients.map(function(p){return p.id===saved.id?saved:p;});
+      setTimeout(function(){setSaveInd("");},2000);
+    });
   },900);
 }
 function setSaveInd(st){
@@ -288,14 +294,13 @@ function go(view,extra){
 function render(){
   var app=document.getElementById("app");
   if(S.loading){app.innerHTML='<div class="loading"><div class="spinner"></div>Conectando…</div>';return;}
-  var fn={mapa:vMapa,lista:vLista,detail:vDetail,edit:vEdit,new:vNew,historial:vHistorial};
+  var fn={mapa:vMapa,lista:vLista,detail:vDetail,edit:vEdit,new:vNew,historial:vHistorial,guardia:vGuardia,stats:vStats};
   app.innerHTML=(fn[S.view]||vMapa)()+botNav();
 }
 function botNav(){
-  var tabs=[["mapa","🗺️","Mapa"],["lista","📋","Lista"],["historial","📚","Historial"],["_pdf","🖨️","PDF"]];
+  var tabs=[["mapa","🗺️","Mapa"],["lista","📋","Lista"],["guardia","🚑","Guardia"],["stats","📊","Stats"],["historial","📚","Historial"]];
   return '<div class="bot-nav no-print">'+tabs.map(function(t){
-    var fn=t[0]==="_pdf"?"printPase()":"go('"+t[0]+"')";
-    return '<button class="nav-btn'+(S.view===t[0]?" active":"")+'" onclick="'+fn+'"><span class="ico">'+t[1]+'</span>'+t[2]+'</button>';
+    return '<button class="nav-btn'+(S.view===t[0]?" active":"")+'" onclick="go(\''+t[0]+'\')"><span class="ico">'+t[1]+'</span>'+t[2]+'</button>';
   }).join("")+'</div>';
 }
 
@@ -569,6 +574,109 @@ function formHtml(d){
     '<div class="form-sec-hdr">📝 Evoluciones</div>'+evolvHtml+
     '<div class="form-sec-hdr">🔬 Estudios</div>'+estudiosHtml+
     '<div class="form-sec-hdr">✅ Pendientes / Tareas</div>'+pendHtml;
+}
+
+// ── Vista: GUARDIA ────────────────────────────────────────────────────
+function vGuardia(){
+  var pts=S.patients.slice().sort(function(a,b){return Number(a.cama)-Number(b.cama);});
+  var totalPend=pts.reduce(function(s,p){return s+(p.pendientes||[]).filter(function(t){return !t.done;}).length;},0);
+  var cards=pts.length===0?'<div class="empty-st">No hay pacientes internados.</div>'
+    :pts.map(function(p){
+      var pend=(p.pendientes||[]).filter(function(t){return !t.done;});
+      var al=autoAlerts(p).filter(function(a){return a.level>=2;});
+      return '<div style="background:white;border-radius:12px;border:1px solid var(--border);padding:12px;margin-bottom:8px">'+
+        '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">'+
+          '<span class="cama-badge">'+esc(p.cama)+'</span>'+
+          '<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">'+esc(p.nombre)+'</div>'+
+          '<div style="font-size:12px;color:var(--gray)">'+esc(p.diagnostico)+'</div></div>'+
+          '<span class="days-pill">'+diasDesde(p.fechaIngreso)+'</span>'+
+        '</div>'+
+        (al.length?'<div style="margin-bottom:5px">'+al.map(function(a){return '<span style="font-size:11px;background:#fef2f2;color:var(--red);border-radius:99px;padding:2px 8px;margin-right:3px">⚠ '+a.text+'</span>';}).join('')+'</div>':'')+
+        '<div style="border-top:1px solid var(--border);padding-top:6px">'+
+          (pend.length
+            ?pend.map(function(t){return '<div style="display:flex;gap:6px;margin-bottom:4px"><span style="color:var(--blue);font-size:16px;line-height:1.2;flex-shrink:0">☐</span><span style="font-size:13px">'+esc(t.texto)+'</span></div>';}).join('')
+            :'<div style="font-size:12px;color:#94a3b8;font-style:italic">Sin pendientes</div>')+
+        '</div>'+
+      '</div>';
+    }).join("");
+  return '<div class="screen">'+
+    '<div class="hdr"><div class="hdr-row">'+
+      '<div><div class="hdr-sub">Sanatorio 9 de Julio</div><div class="hdr-title">Guardia — Pendientes</div><div class="hdr-date">'+today()+'</div></div>'+
+      '<div class="hdr-cnt"><div class="hdr-num">'+totalPend+'</div><div class="hdr-lbl">pendiente'+(totalPend!==1?'s':'')+'</div></div>'+
+    '</div></div>'+
+    '<div style="padding:10px 12px 6px">'+
+      '<button class="btn btn-blue-o" onclick="printGuardia()">🖨 Imprimir lista de guardia</button>'+
+      '<button class="btn btn-blue-o" onclick="printPase()" style="margin-top:6px">🖨 Pase de guardia completo</button>'+
+    '</div>'+
+    '<div style="padding:4px 12px 24px">'+cards+'</div></div>';
+}
+
+function printGuardia(){
+  var pts=S.patients.slice().sort(function(a,b){return Number(a.cama)-Number(b.cama);});
+  var rows=pts.map(function(p){
+    var pend=(p.pendientes||[]).filter(function(t){return !t.done;});
+    var al=autoAlerts(p).filter(function(a){return a.level>=2;});
+    return '<tr><td style="padding:8px;font-weight:700;white-space:nowrap;vertical-align:top;border-bottom:1px solid #e2e8f0">'+esc(p.cama)+'</td>'+
+      '<td style="padding:8px;vertical-align:top;border-bottom:1px solid #e2e8f0"><b>'+esc(p.nombre)+'</b><br><span style="font-size:11px;color:#6b7280">'+esc(p.diagnostico)+'</span></td>'+
+      '<td style="padding:8px;vertical-align:top;border-bottom:1px solid #e2e8f0">'+
+        al.map(function(a){return '<div style="font-size:11px;color:#dc2626;margin-bottom:2px">⚠ '+a.text+'</div>';}).join('')+
+        (pend.length?pend.map(function(t){return '<div style="font-size:12px;margin-bottom:2px">☐ '+esc(t.texto)+'</div>';}).join(''):'<span style="font-size:11px;color:#94a3b8">–</span>')+
+      '</td></tr>';
+  }).join("");
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Guardia</title><style>body{font-family:Arial,sans-serif;padding:20px;color:#111}table{width:100%;border-collapse:collapse}th{background:#1d4ed8;color:white;padding:8px;text-align:left;font-size:12px}@media print{.np{display:none}}</style></head><body>'+
+    '<div class="np" style="margin-bottom:12px"><button onclick="window.print()" style="background:#1d4ed8;color:white;border:none;padding:8px 20px;border-radius:8px;cursor:pointer">🖨 Imprimir</button></div>'+
+    '<div style="text-align:center;margin-bottom:16px"><div style="font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:2px;text-transform:uppercase">Sanatorio 9 de Julio — Pediatría</div>'+
+    '<h1 style="margin:4px 0;font-size:20px">GUARDIA — PENDIENTES</h1><p style="color:#6b7280;font-size:12px;text-transform:capitalize">'+today()+'</p></div>'+
+    '<table><thead><tr><th style="width:55px">Cama</th><th style="width:200px">Paciente / Dx</th><th>Pendientes y alertas</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<p style="text-align:center;font-size:10px;color:#d1d5db;margin-top:12px">'+new Date().toLocaleString("es-AR")+'</p></body></html>';
+  var w=window.open("","_blank"); if(w){w.document.write(html);w.document.close();} else alert("Habilitá popups.");
+}
+
+// ── Vista: ESTADÍSTICAS ───────────────────────────────────────────────
+function vStats(){
+  var pts=S.patients, dc=S.discharged, n=pts.length;
+  var avgDias=n?Math.round(pts.reduce(function(s,p){return s+Math.floor((Date.now()-new Date(p.fechaIngreso))/864e5);},0)/n*10)/10:0;
+  var origC={},nutC={},medT={},cortAlert=0,nutAlert=0,baseAlert=0;
+  pts.forEach(function(p){
+    var o=p.origenIngreso||"No especificado"; origC[o]=(origC[o]||0)+1;
+    if(p.estadoNutricional) nutC[p.estadoNutricional]=(nutC[p.estadoNutricional]||0)+1;
+    var seen={};
+    (p.medicaciones||[]).forEach(function(m){var t=m.tipo||"Otro";if(!seen[t]){seen[t]=true;medT[t]=(medT[t]||0)+1;}});
+    autoAlerts(p).forEach(function(a){
+      if(a.text.includes("CTC")||a.text.includes("AINE")) cortAlert++;
+      else if(a.text.includes("Nutri")||a.text.includes("Obesi")||a.text.includes("Sobre")) nutAlert++;
+      else if(a.text.includes("base")) baseAlert++;
+    });
+  });
+  var now=new Date(), mes=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  var dcMes=dc.filter(function(p){return (p.fechaAlta||"").startsWith(mes);});
+  var dcTipo={}; dcMes.forEach(function(p){var t=p.tipoAlta||"Otro";dcTipo[t]=(dcTipo[t]||0)+1;});
+
+  function bigN(v,l){ return '<div style="background:white;border-radius:12px;border:1px solid var(--border);padding:12px;text-align:center"><div style="font-size:26px;font-weight:800;color:var(--blue)">'+v+'</div><div style="font-size:10px;color:var(--gray);font-weight:600;text-transform:uppercase;margin-top:2px">'+l+'</div></div>'; }
+  function row(l,v,c){ return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)"><span style="font-size:13px;color:#374151">'+l+'</span><span style="font-size:14px;font-weight:700;color:'+(c||'var(--blue)')+'">'+v+'</span></div>'; }
+  function card(title,content){ return '<div style="background:white;border-radius:14px;border:1px solid var(--border);padding:14px;margin-bottom:10px"><div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:var(--blue);margin-bottom:8px">'+title+'</div>'+content+'</div>'; }
+  var empty='<div style="font-size:12px;color:#94a3b8;font-style:italic">Sin datos</div>';
+  var mesLbl=["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][now.getMonth()]+" "+now.getFullYear();
+
+  return '<div class="screen">'+
+    '<div class="hdr"><div class="hdr-row">'+
+      '<div><div class="hdr-sub">Sanatorio 9 de Julio</div><div class="hdr-title">Estadísticas</div><div class="hdr-date">'+today()+'</div></div>'+
+      '<div class="hdr-cnt"><div class="hdr-num">'+n+'</div><div class="hdr-lbl">internado'+(n!==1?'s':'')+'</div></div>'+
+    '</div></div>'+
+    '<div style="padding:12px 12px 24px">'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">'+bigN(n,"Internados")+bigN(avgDias+"d","Prom. estadía")+bigN(dcMes.length,"Altas "+mesLbl)+'</div>'+
+      ((cortAlert+nutAlert+baseAlert)>0
+        ?'<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:12px;padding:12px;margin-bottom:10px">'+
+          '<div style="font-size:11px;font-weight:800;text-transform:uppercase;color:var(--red);margin-bottom:6px">⚠ Alertas activas en curso</div>'+
+          (cortAlert?'<div style="font-size:13px;margin-bottom:3px">💊 Medicación prolongada: <b>'+cortAlert+' pac.</b></div>':'')+
+          (nutAlert?'<div style="font-size:13px;margin-bottom:3px">⚖️ Estado nutricional alterado: <b>'+nutAlert+' pac.</b></div>':'')+
+          (baseAlert?'<div style="font-size:13px">🔶 Con enfermedad de base: <b>'+baseAlert+' pac.</b></div>':'')+
+        '</div>':'')+ 
+      card("📍 Origen de ingreso", Object.keys(origC).length?Object.keys(origC).map(function(k){return row(k,origC[k]);}).join(""):empty)+
+      card("⚖️ Estado nutricional", Object.keys(nutC).length?Object.keys(nutC).map(function(k){var c=k.includes("Desnut")?"var(--red)":k==="Obesidad"||k==="Sobrepeso"?"var(--orange)":"var(--green)";return row(k,nutC[k],c);}).join(""):empty)+
+      card("💊 Medicación activa (por tipo)", Object.keys(medT).length?Object.keys(medT).sort(function(a,b){return medT[b]-medT[a];}).map(function(k){return row(k,medT[k]+" pac.");}).join(""):empty)+
+      card("🚪 Altas de "+mesLbl, Object.keys(dcTipo).length?Object.keys(dcTipo).map(function(k){return row(k,dcTipo[k]);}).join(""):empty)+
+    '</div></div>';
 }
 
 // ── Vista: HISTORIAL ──────────────────────────────────────────────────
